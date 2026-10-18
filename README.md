@@ -14,8 +14,7 @@ only disappeared once many on/off cycles were averaged with a per-bin significan
 test. The low-MHz frequency-shift-keying (FSK) scheme did not radiate usably on this
 hardware, so the practical scheme is on-off keying (OOK) at a fixed UHF carrier.
 
-See [`report/phase1_report.pdf`](report/phase1_report.pdf) for the figures and a short
-writeup.
+See [`report/`](report/) for the figures.
 
 ## Layout
 
@@ -28,7 +27,7 @@ writeup.
 | `tempest-ddr/Makefile`, `README.md` | Build recipe and background. |
 | `analysis/` | Scripts that produced the Phase 1 figures: averaged on/off differencing with a Welch t-test (`avg_diff.py`), the on/off waterfall capture (`wf_capture.py`), and figure/report generation. |
 | `captures/` | Raw measurement data (`.csv`, `.npz`) and `NOTES.md`, the lab log. |
-| `report/` | The three figures and the PDF report. |
+| `report/` | The three figures (PNG). |
 
 ## How the result was produced
 
