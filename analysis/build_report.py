@@ -84,7 +84,7 @@ footer{{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);
   <p class="sub">A first bring-up with a handheld spectrum analyzer: can we detect, above a noisy
   unshielded room, an RF emission that switches with the board's memory activity — and at what frequency?</p>
   <div class="meta">
-    <span>2026-10-17</span><span>R. Boada</span><span>Adv. S. Sethumadhavan</span>
+    <span>2026-10-17</span><span>R. Boada</span>
     <span>tinySA Ultra+ · whip · no shield</span>
   </div>
 </header>

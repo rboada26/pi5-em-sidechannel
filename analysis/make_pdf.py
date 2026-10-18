@@ -69,7 +69,7 @@ with PdfPages(OUT) as pdf:
     ax = fig.add_axes([0,0,1,1]); ax.axis("off")
     ax.text(0.08, 0.955, "Pi 5 EM Side-Channel - Phase 1 Findings", fontsize=18, fontweight="bold")
     ax.text(0.08, 0.935, "Does the Raspberry Pi 5 radiate a data-dependent signal?  |  2026-10-17  |  "
-            "R. Boada, adv. S. Sethumadhavan", fontsize=9, color="#555")
+            "R. Boada", fontsize=9, color="#555")
     ax.axhline(0.927, 0.08, 0.92, color="black", lw=1.2)
     ax.text(0.08, 0.90, SUMMARY, fontsize=9.5, va="top", family="DejaVu Sans", linespacing=1.5)
     ax.text(0.08, 0.50, CHALLENGES, fontsize=9.5, va="top", family="DejaVu Sans", linespacing=1.5)

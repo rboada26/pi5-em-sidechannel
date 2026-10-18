@@ -4,8 +4,6 @@ Phase 1 of an EM (TEMPEST) side-channel study on the Raspberry Pi 5: establish t
 the board's own memory-bus activity radiates a **data-dependent** RF signal that can
 be measured from outside the board, before moving on to LLM-inference leakage.
 
-Advisor: Prof. Simha Sethumadhavan (Columbia).
-
 ## Result
 
 With the Pi's clocks pinned and a memory loop toggled on/off, the board radiates an
