@@ -1,0 +1,9 @@
+# Not part of the experiment record
+tempest-ddr.tar.gz
+CLAUDE.md
+__pycache__/
+*.pyc
+captures/sa_out/
+
+# Build artifact (compiled on the Pi)
+tempest-ddr/tx_ddr
