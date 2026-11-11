@@ -14,7 +14,17 @@ only disappeared once many on/off cycles were averaged with a per-bin significan
 test. The low-MHz frequency-shift-keying (FSK) scheme did not radiate usably on this
 hardware, so the practical scheme is on-off keying (OOK) at a fixed UHF carrier.
 
-See [`report/`](report/) for the figures.
+**Shielding & range:** wrapping the Pi in aluminum foil attenuates the emission by
+5–7.5 dB and cuts the detection range from ~30 cm (unshielded, resonant whip) to a
+couple of cm.
+
+**Payload recovery (Phase 1 complete):** the Pi transmitted the message **"SOS" in
+Morse code** through its 286.8 MHz emission (`tx_ddr --morse`), and a HackRF One
+recovered it over the air with **zero errors** using coherent averaging of the
+repeated message. See [`hackrf/`](hackrf/) and
+[`report/sos_demo_report.pdf`](report/sos_demo_report.pdf).
+
+See [`report/`](report/) for the figures and reports.
 
 ## Layout
 
@@ -23,11 +33,13 @@ See [`report/`](report/) for the figures.
 | `tempest-ddr/tx_ddr.c` | Transmitter that runs on the Pi. `--carrier` mode (continuous streaming writes to DRAM) is what produced the detected emission. |
 | `tempest-ddr/sa_tinysa.py` | Driver for the tinySA Ultra+ spectrum analyzer (runs on the laptop; captures sweeps to CSV). |
 | `tempest-ddr/rx_sa.py` | On/off differencing analysis for spectrum-analyzer CSV traces. |
-| `tempest-ddr/rx_average.py` | SDR (IQ) averaging analysis — for the later, higher-fidelity path; not used in Phase 1. |
+| `tempest-ddr/tx_ddr.c` | Also has `--morse TEXT` (OOK Morse keying of the carrier). |
+| `tempest-ddr/rx_average.py` | SDR (IQ) averaging analysis. |
 | `tempest-ddr/Makefile`, `README.md` | Build recipe and background. |
-| `analysis/` | Scripts that produced the Phase 1 figures: averaged on/off differencing with a Welch t-test (`avg_diff.py`), the on/off waterfall capture (`wf_capture.py`), and figure/report generation. |
+| `hackrf/` | HackRF One receiver pipeline: `hrf_capture.py` (RX smoke test), `hrf_detect.py` (interleaved on/off detection), `morse_decode.py` (coherent-averaging Morse decoder). Works around old HackRF firmware by driving `libhackrf` directly. |
+| `analysis/` | Scripts that produced the figures: averaged on/off differencing with a Welch t-test (`avg_diff.py`), the waterfall capture (`wf_capture.py`), and figure/report generation (`make_pdf.py`). |
 | `captures/` | Raw measurement data (`.csv`, `.npz`) and `NOTES.md`, the lab log. |
-| `report/` | The three figures (PNG). |
+| `report/` | Figures (PNG) and report PDFs. |
 
 ## How the result was produced
 

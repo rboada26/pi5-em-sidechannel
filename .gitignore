@@ -7,3 +7,11 @@ captures/sa_out/
 
 # Build artifact (compiled on the Pi)
 tempest-ddr/tx_ddr
+
+# Personal Obsidian notes vault and a stale duplicate
+em proj notes/
+presentation-notes.md
+
+# Intermediate/superseded captures
+captures/morse_env.npz
+captures/hrf_onoff.npz

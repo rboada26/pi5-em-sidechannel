@@ -39,6 +39,7 @@
 #include <time.h>
 #include <getopt.h>
 #include <errno.h>
+#include <ctype.h>
 
 #include <gpiod.h>   /* libgpiod v2 */
 
@@ -56,7 +57,7 @@
  * off the analyzer. Keep it simple: OOK = ones-burst (mark) vs zeros-burst (space).
  */
 
-enum mod { MOD_OOK, MOD_CARRIER_ONLY, MOD_FSK };
+enum mod { MOD_OOK, MOD_CARRIER_ONLY, MOD_FSK, MOD_MORSE };
 
 #define MAX_FREQS 8
 
@@ -78,6 +79,8 @@ struct cfg {
     int      bit_line;
     const char *chip_path;
     const char *bits;           /* ASCII '0'/'1' payload, repeated each frame */
+    const char *msg;            /* MORSE: text message to key as Morse code */
+    double   unit_ms;           /* MORSE: dot/unit duration in ms */
     enum mod mod;
     int      cpu;               /* pin to this core */
 };
@@ -143,6 +146,67 @@ static void busy_wait_us(unsigned us)
     } while ((t1.tv_sec - t0.tv_sec) * 1e9 + (t1.tv_nsec - t0.tv_nsec) < target);
 }
 
+/* ---- Morse (OOK) helpers ---- */
+/* Busy-wait `ms` milliseconds with the memory bus quiet (a "space"). */
+static void wait_ms(double ms)
+{
+    if (ms <= 0) return;
+    struct timespec t0, now;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    double end = (double)t0.tv_sec * 1e9 + t0.tv_nsec + ms * 1e6;
+    do { clock_gettime(CLOCK_MONOTONIC, &now); }
+    while (((double)now.tv_sec * 1e9 + now.tv_nsec) < end);
+}
+
+/* Sleep `ms` ms with the core idle (a "space" = carrier OFF). Truly idle, not a
+ * busy-spin, so a mark (streaming) and a space differ as much as possible. */
+static void sleep_ms(double ms)
+{
+    if (ms <= 0) return;
+    struct timespec ts;
+    ts.tv_sec  = (time_t)(ms / 1000.0);
+    ts.tv_nsec = (long)((ms - (double)ts.tv_sec * 1000.0) * 1e6);
+    nanosleep(&ts, 0);
+}
+
+/* Stream alternating ones/zeros to DRAM for `ms` ms (a "mark" = carrier ON). */
+static void stream_mark(volatile uint64_t *buf, size_t span, unsigned stores, double ms)
+{
+    struct timespec t0, now;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    double end = (double)t0.tv_sec * 1e9 + t0.tv_nsec + ms * 1e6;
+    do {
+        for (unsigned i = 0; i < stores; i += 4) {
+            size_t idx = (size_t)i % span;
+            nt_store_pair(buf + idx,     ~0ULL);
+            nt_store_pair(buf + idx + 2, 0ULL);
+        }
+        asm volatile("dsb st" ::: "memory");
+        clock_gettime(CLOCK_MONOTONIC, &now);
+    } while (((double)now.tv_sec * 1e9 + now.tv_nsec) < end);
+}
+
+/* Morse code for A-Z and 0-9; "" for unknown characters. */
+static const char *morse_of(char c)
+{
+    switch (toupper((unsigned char)c)) {
+    case 'A': return ".-";    case 'B': return "-...";  case 'C': return "-.-.";
+    case 'D': return "-..";   case 'E': return ".";     case 'F': return "..-.";
+    case 'G': return "--.";   case 'H': return "....";  case 'I': return "..";
+    case 'J': return ".---";  case 'K': return "-.-";   case 'L': return ".-..";
+    case 'M': return "--";    case 'N': return "-.";    case 'O': return "---";
+    case 'P': return ".--.";  case 'Q': return "--.-";  case 'R': return ".-.";
+    case 'S': return "...";   case 'T': return "-";     case 'U': return "..-";
+    case 'V': return "...-";  case 'W': return ".--";   case 'X': return "-..-";
+    case 'Y': return "-.--";  case 'Z': return "--..";
+    case '0': return "-----"; case '1': return ".----"; case '2': return "..---";
+    case '3': return "...--"; case '4': return "....-"; case '5': return ".....";
+    case '6': return "-...."; case '7': return "--..."; case '8': return "---..";
+    case '9': return "----.";
+    default: return "";
+    }
+}
+
 int main(int argc, char **argv)
 {
     struct cfg c = {
@@ -159,6 +223,8 @@ int main(int argc, char **argv)
         .bit_line = DEFAULT_BIT_LINE,
         .chip_path = DEFAULT_GPIO_CHIP,
         .bits = "10110100", /* distinctive, non-symmetric preamble-ish default */
+        .msg = "SOS",
+        .unit_ms = 60.0,
         .mod = MOD_OOK,
         .cpu = 2,
     };
@@ -178,11 +244,13 @@ int main(int argc, char **argv)
         {"chip",    required_argument, 0, 'c'},
         {"cpu",     required_argument, 0, 'u'},
         {"carrier", no_argument,       0, 'C'},
+        {"morse",   required_argument, 0, 'M'},
+        {"unit",    required_argument, 0, 'U'},
         {"help",    no_argument,       0, 'h'},
         {0,0,0,0}
     };
     int ch;
-    while ((ch = getopt_long(argc, argv, "r:s:S:F:D:T:g:b:m:t:p:c:u:Ch", opts, 0)) != -1) {
+    while ((ch = getopt_long(argc, argv, "r:s:S:F:D:T:g:b:m:t:p:c:u:CM:U:h", opts, 0)) != -1) {
         switch (ch) {
         case 'r': c.reps = strtoul(optarg,0,0); break;
         case 's': c.stores_per_symbol = strtoul(optarg,0,0); break;
@@ -208,6 +276,8 @@ int main(int argc, char **argv)
         case 'c': c.chip_path = optarg; break;
         case 'u': c.cpu = atoi(optarg); break;
         case 'C': c.mod = MOD_CARRIER_ONLY; break;
+        case 'M': c.mod = MOD_MORSE; c.msg = optarg; break;
+        case 'U': c.unit_ms = strtod(optarg, 0); break;
         case 'h':
         default:
             fprintf(stderr,
@@ -227,7 +297,9 @@ int main(int argc, char **argv)
               "  -p --bitpin BCM   GPIO per-symbol toggle line (default 27, -1 disables)\n"
               "  -c --chip PATH    gpiochip path (default /dev/gpiochip0)\n"
               "  -u --cpu N        pin to CPU core N (default 2; use an isolcpu)\n"
-              "  -C --carrier      emit continuous carrier only (tune the analyzer)\n",
+              "  -C --carrier      emit continuous carrier only (tune the analyzer)\n"
+              "  -M --morse TEXT   OOK the carrier as Morse code (e.g. SOS); loops until /tmp/tx_stop\n"
+              "  -U --unit MS      Morse unit (dot) duration in ms (default 60)\n",
               argv[0], DEFAULT_REPS);
             return ch=='h'?0:2;
         }
@@ -322,7 +394,8 @@ int main(int argc, char **argv)
     const uint64_t ZERO = 0ULL;
 
     const char *modname = c.mod==MOD_OOK ? "OOK"
-                        : c.mod==MOD_FSK ? "FSK" : "carrier-only";
+                        : c.mod==MOD_FSK ? "FSK"
+                        : c.mod==MOD_MORSE ? "morse" : "carrier-only";
     fprintf(stderr, "tx_ddr: reps=%u stores/sym=%u gap=%uus bits='%s' buf=%zuMiB cpu=%d mod=%s\n",
             c.reps, stores, c.gap_us, c.bits, c.buf_bytes>>20, c.cpu, modname);
 
@@ -344,6 +417,32 @@ int main(int argc, char **argv)
             if ((k & 0xFFFF) == 0 && access("/tmp/tx_stop", F_OK) == 0) break;
         }
         SET(c.trig_line, 0);
+        goto done;
+    }
+
+    if (c.mod == MOD_MORSE) {
+        /* OOK Morse: mark = DRAM streaming (carrier ON), space = quiet bus.
+         * Standard timing in units u: dot=1u on, dash=3u on, intra-char gap=1u,
+         * inter-char gap=3u, word gap=7u. Loops the message (word gap between
+         * repeats) until /tmp/tx_stop appears, so the receiver catches several. */
+        size_t span = (words / 4) * 4;
+        double u = c.unit_ms;
+        fprintf(stderr, "tx_ddr: MORSE '%s' unit=%.0f ms (dot=%.0f dash=%.0f ms)\n",
+                c.msg, u, u, 3.0*u);
+        while (access("/tmp/tx_stop", F_OK) != 0) {
+            SET(c.trig_line, 1);
+            for (const char *p = c.msg; *p; ++p) {
+                if (*p == ' ') { sleep_ms(7.0*u); continue; }      /* word gap */
+                const char *code = morse_of(*p);
+                for (const char *e = code; *e; ++e) {
+                    stream_mark(buf, span, stores, (*e == '-' ? 3.0 : 1.0) * u);
+                    if (*(e+1)) sleep_ms(u);                        /* intra-char gap */
+                }
+                sleep_ms(3.0*u);                                   /* inter-char gap */
+            }
+            SET(c.trig_line, 0);
+            sleep_ms(7.0*u);                                       /* word gap before repeat */
+        }
         goto done;
     }
 

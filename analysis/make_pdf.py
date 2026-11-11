@@ -26,6 +26,24 @@ figs = [
      "brighter while the loop runs (below the dashed line). The side panel tracks the level at 286.8 MHz "
      "per sweep: a clear step at the switch. The line is present at baseline too - likely an always-on "
      "clock that activity modulates, which is exactly the hook a side/covert channel would use."),
+    ("fig4_foil_shield.png",
+     "Fig 4 - Aluminum-foil shield test. Paired measurement (same session, antenna fixed): the Pi was "
+     "wrapped in aluminum foil (board insulated first; foil never touching pins) and the 255-295 MHz "
+     "averaged on/off measurement repeated. The foil attenuates the carrier-on level by 5.3 dB at 263.4 "
+     "MHz and 7.5 dB at 286.8 MHz. The activity-dependent detection weakens accordingly: at 263.4 MHz it "
+     "falls below significance (t 6.6 -> 2.2); at 286.8 MHz it survives but is reduced (t 8.1 -> 5.0). "
+     "A passive foil wrap can only attenuate a signal radiating into free space, so this independently "
+     "confirms the emission is real board radiation. The shielding is partial - expected for a hand-wrapped, "
+     "ungrounded foil with seams, and because the power cable penetrates the shield and can conduct/re-radiate "
+     "the signal (the likely path for the surviving 286.8 MHz line)."),
+    ("fig5_distance.png",
+     "Fig 5 - Detection range vs. distance (antenna fully extended, near 1/4-wave for this band). "
+     "Unshielded, the stronger 286.8 MHz line is readable out to ~30 cm and is gone by 40 cm; the weaker "
+     "263.4 MHz line reaches ~10-15 cm. With the Pi wrapped in aluminum foil the signal is at the noise "
+     "floor even at 4 cm - the foil cuts the readable range from ~30 cm to a couple of cm, a 7-10x "
+     "reduction. Note the antenna matters: a collapsed whip could not read the signal at 10 cm at all, "
+     "while the extended (resonant) whip read it to ~30 cm - so detection range is set as much by the "
+     "receiver's antenna as by the source."),
 ]
 
 SUMMARY = (
@@ -39,9 +57,16 @@ SUMMARY = (
     "these carriers is the natural scheme going forward - not the low-MHz frequency-shift idea we started\n"
     "with (the memory 'tick' rate barely radiates on this hardware).\n\n"
     "Setup: Pi 5 (clocks pinned at 2.4 GHz) running tx_ddr --carrier; tinySA Ultra+ with a whip antenna\n"
-    "near the board; no shield yet. Method: interleaved on/off sweeps (carrier toggled each round so\n"
-    "ambient cancels), 290 points/sweep, averaged, with a per-bin Welch t-test to separate real emission\n"
-    "from ambient."
+    "near the board. Method: interleaved on/off sweeps (carrier toggled each round so ambient cancels),\n"
+    "290 points/sweep, averaged, with a per-bin Welch t-test to separate real emission from ambient.\n\n"
+    "Shielding: wrapping the Pi in aluminum foil (board insulated, foil clear of the pins) attenuates the\n"
+    "emission by 5-7.5 dB and knocks out the 263.4 MHz detection, confirming the signal is genuinely\n"
+    "radiated. The shield is partial - the power cable penetrates it and the 286.8 MHz line survives (t=5),\n"
+    "pointing to the power lead as a leakage path and the next thing to measure.\n\n"
+    "Detection range: with a resonant (fully extended) whip, the unshielded signal is readable to ~30 cm\n"
+    "(286.8 MHz) and dies by 40 cm - a near-field-dominated emission. The foil wrap collapses this to a\n"
+    "couple of cm (7-10x). The antenna matters as much as the source: a collapsed whip saw nothing at\n"
+    "10 cm where the extended whip still read the signal clearly."
 )
 
 CHALLENGES = (
@@ -82,6 +107,45 @@ with PdfPages(OUT) as pdf:
         axc = fig.add_axes([0.08, 0.06, 0.84, 0.24]); axc.axis("off")
         axc.text(0, 1, cap, fontsize=10, va="top", wrap=True, linespacing=1.5)
         pdf.savefig(fig); plt.close(fig)
+
+    # ---- distance / shielding tables page ----
+    NOFOIL = [("~2 cm","original",6.6,8.1),("4 cm","collapsed",1.3,4.9),
+              ("10 cm","collapsed",0.6,1.0),("10 cm (repos.)","collapsed",-1.4,0.3),
+              ("10 cm","extended",5.6,4.3),("30 cm","extended",0.9,4.5),
+              ("40 cm","extended",-0.2,0.9),("50 cm","extended",-0.2,0.1)]
+    FOIL   = [("~2 cm","original",2.2,5.0),("4 cm","extended",-0.5,0.0),
+              ("10 cm","extended",0.0,-0.4),("40 cm","extended",1.2,-0.3)]
+    GREEN="#cdebc5"
+    def add_table(fig, rect, rows):
+        ax = fig.add_axes(rect); ax.axis("off")
+        cols=["Distance","Antenna","263.4 MHz (t)","286.8 MHz (t)"]
+        ct=[]; cc=[]
+        for d_,a_,t1,t2 in rows:
+            ct.append([d_,a_,"%.1f"%t1,"%.1f"%t2])
+            cc.append(["#ffffff","#ffffff", GREEN if t1>=3 else "#ffffff",
+                                            GREEN if t2>=3 else "#ffffff"])
+        tb=ax.table(cellText=ct,colLabels=cols,cellColours=cc,
+                    colColours=["#e6e6e6"]*4,loc="upper center",cellLoc="center")
+        tb.auto_set_font_size(False); tb.set_fontsize(9); tb.scale(1,1.5)
+    fig=plt.figure(figsize=(8.5,11)); axh=fig.add_axes([0,0,1,1]); axh.axis("off")
+    axh.text(0.08,0.955,"Detection range vs. distance - shielded vs. not shielded",
+             fontsize=15,fontweight="bold")
+    axh.text(0.08,0.932,
+             "t = Welch t-statistic = (mean level carrier-ON - mean level carrier-OFF) / noise spread of that\n"
+             "difference. Higher t = more certain the signal is real, not noise. Green = detected (t >= 3,\n"
+             "about 3 sigma). Antenna 'extended' = whip fully out (near 1/4-wave, resonant); 'collapsed' = stowed.",
+             fontsize=9,color="#555",va="top",linespacing=1.5)
+    axh.text(0.08,0.86,"Not shielded",fontsize=12,fontweight="bold")
+    add_table(fig,[0.08,0.55,0.84,0.29],NOFOIL)
+    axh.text(0.08,0.52,"Shielded (aluminum foil)",fontsize=12,fontweight="bold")
+    add_table(fig,[0.08,0.34,0.84,0.165],FOIL)
+    axh.text(0.08,0.285,
+             "Max detection distance (extended whip):  not shielded ~10 cm (263.4 MHz) / ~30 cm (286.8 MHz);\n"
+             "shielded < 4 cm for both lines. The antenna matters as much as the source - a collapsed whip\n"
+             "barely read the signal even at 4 cm, where the extended whip read it clearly to ~30 cm.",
+             fontsize=9.5,va="top",linespacing=1.5)
+    pdf.savefig(fig); plt.close(fig)
+
     d = pdf.infodict(); d["Title"] = "Pi 5 EM Side-Channel - Phase 1"; d["Author"] = "R. Boada"
 
 print("wrote", OUT)
